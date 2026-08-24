@@ -1,87 +1,35 @@
-import scipy
-import numpy
-import itertools
-from functools import reduce
-from operator import getitem
-from fractions import Fraction
 import copy
-
-def _powerset(s):
-	'''
-	S is some arbitrary set
-	
-	returns: The powerset
-	'''
-	x = len(s)
-	P = []
-	for i in range(1 << x):
-		P.append([s[j] for j in range(x) if (i & (1 << j))])
-	return P
-
-def get_models(B):
-	'''
-	B is an array
-	
-	returns all ordered partitions of B
-	'''
-	A = []
-	while(len(B) != 0):
-		C = B[-1]
-		D = C[-1]
-		B.pop()
-		C.pop()
-		for i in _powerset(D):
-			if(len(i) != 0):
-				if(len(i) == len(D)):
-					C2 = copy.deepcopy(C)
-					C2.append(D)
-					A.append(C2)
-				else:
-					E = copy.deepcopy(D)
-					for j in i:
-						E.remove(j)
-					C2 = copy.deepcopy(C)
-					C2.append(i)
-					C2.append(E)
-					B.append(C2)
-	return A
-
-def turn_model_into_deg_array(m, n):
-    '''
-	m is a model
-    n is the number of players
-	
-	returns: Tranlated model m into a model which only carries degree
-	
-	attention: the base set of the model is expected to be of the form [1,..,n] 
-	'''
-    
-    a = []
-    done = False
-    for i in range(1,n+1):
-        done = False
-        for j in range(0,len(m)):
-            if(done):
-                break
-            for k in range(0,len(m[j])):
-                if(m[j][k]==i):
-                    a.append(j+1)
-                    done = True
-                    break
-    return a
+import itertools
+import numpy as np
+import scipy
+from functools import reduce
+from fractions import Fraction
+from operator import getitem
 
 def get_deg_models(n):
-    '''
-    n is the number of players
-
-    combines get_model and turn_model_into_deg_array
-    '''
-    s = [k for k in range(1, n+1)]
-    M = get_models([[s]])
-    MD = []
-    for m in M:
-        MD.append(turn_model_into_deg_array(m,n))
-    return MD
+    A = [[0]*n]
+    while len(A) != 0:
+        c = A.pop()
+        ma = 0
+        o = []
+        for i in range(0, n):
+            ma = max(ma, c[i])
+            if c[i] == 0:
+                o.append(i)
+        m = len(o)
+        for i in range(1,(1 << m)-1):
+            P = []
+            for j in range(m):
+                if(i & (1<<j)):
+                    P.append(o[j])
+            d = copy.deepcopy(c)
+            for j in range(0, len(P)):
+                d[P[j]] = ma+1
+            A.append(d)
+        d = copy.deepcopy(c)
+        for k in o:
+            d[k] = ma+1
+        yield d
 
 def complement_p_supp(S, p):
     '''
@@ -132,7 +80,7 @@ def calculate_expectency(Xi, S, p, i, si=None):
             expected += reduce(getitem, s, Xi) * reduce(getitem, s, p) # type: ignore
     return expected     
 
-def solve_inequalites(X, m, maxD, E, vanishing_marginals):
+def solve_inequalites(X, m, maxD, E, vanishing_marginals, verbose=False):
     '''
 	X pay-off matrices
     m is given model
@@ -140,35 +88,46 @@ def solve_inequalites(X, m, maxD, E, vanishing_marginals):
 	E is a list where E[i] is the expected pay-off of player i
     '''
     n = len(vanishing_marginals)
-    l = 1 # lower bound
+
+    if verbose:
+        print(f"Testing model m={m}")
+
+    min_deg = [maxD]*len(vanishing_marginals)
+    # for i in range(vanishing_marginals):
+        # min_deg[i]=maxD
+
+    for j in range(len(vanishing_marginals)):
+        si = vanishing_marginals[j]
+        for s in m.keys():
+            if s[si[0]] == si[1]:
+                min_deg[j] = min(min_deg[j], m[s])
     
-    for d in range(1, maxD+1): # solving a LP for each of the degrees
-        # base = complement_p_supp(S, p)
+    for d in range(1, maxD + 1): # solving a LP for each of the degrees
         J = []
-        # for s in S:
         for s in m.keys():
             if m[s] == d:
                 J.append(s)
-
-        print(f"d = {d}, J = {J}")
+        if verbose:
+            print(f"d={d}, J ={J}")
 
         # weight vector is simply zeros; 
-        # optimzing constant functino is equivlanet to checking whether feasible set is empty
-        c = numpy.zeros(len(J)) 
-        b = numpy.zeros(n)
+        # optimzing constant function is equivlanet to checking whether feasible set is empty
+        c = np.zeros(len(J)) 
+        b = np.zeros(n)
 
-        A = numpy.zeros((n,len(J)))
+        A = np.zeros((n, len(J)))
         for k, si in enumerate(vanishing_marginals):
             for l, s in enumerate(J):
-                if si[1] == s[si[0]]:
+                if si[1] == s[si[0]] and min_deg[k] == d:
                     A[k][l] = reduce(getitem, s, X[si[0]]) - E[si[0]] # type: ignore
 
-        LP_res = scipy.optimize.linprog(c, A_ub = A, b_ub = b, bounds = (l, None))
+        LP_res = scipy.optimize.linprog(c, A_ub = A, b_ub = b, bounds = (1, None))
         status = LP_res.status 
         x = LP_res.x
-        print(x)
         if status != 0:
             return False
+        if verbose:
+            print(f"Found solution at d={d}, namely x={x}")
 
     return True
 
@@ -230,55 +189,71 @@ def test_DE(X, p, D):
         print("Lies on the Spohn ideal and all marginals defined.")
         return True
 
-    M = get_deg_models(len(T))
     dic = {}
-    for m in M:
+    for m in get_deg_models(len(T)):
+        # print(m)
         maxd = 0
         for i in range(0, len(T)):
             dic[T[i]] = m[i]
             maxd = max(maxd, m[i])
+        # print(dic)
         if solve_inequalites(X, dic, maxd, expected_val, vanishing_marginals):
             print("Model found: ", m)
             return True
     return False
 	
 def bach_strawinsky():
-	X=[
+    '''
+    returns the classic game of Bach--Strawinsky
+    '''
+
+    X = [
     [[2,0],
     [0,3]],
 
     [[3,0],
     [0,2]]
     ]
-	return X 
+    return X 
 
 def prisoners_dilema(): 
-	X=[
+    '''
+    returns the classic game of `Prisoner's dilemma' 
+    '''
+    X = [
     [[-1,-3],
     [0,-2]],
 
     [[-1,0],
     [-3,-2]]
     ]
-	return X
+    return X
 	
 
 if __name__ == "__main__":
 
     S = (list(itertools.product([0, 1], [0, 1])))
 
-    X = bach_strawinsky()
+    X = prisoners_dilema()
 
     p = [
-    [Fraction(1,1),Fraction(0,1)],
+    [Fraction(0,1),Fraction(1,1)],
     [Fraction(0,1),Fraction(0,1)]
     ]
 
     if test_DE(X, p, [2,2]):
-        print("The probability distribution ", p," is a DE!")
-        print("for game ", X)
+        print(f"=============")
+        print(f"Returns True")
+        print(f"The probability distribution")
+        print(f"   p={p}")
+        print(f"is a DE for game")
+        print(f"   X={X}")
     else:
-        print("The probability distribution ", p," is NOT a DE!")
-        print("for game ", X)
+        print(f"=============")
+        print(f"Returns False")
+        print(f"The probability distribution")
+        print(f"   p={p}")
+        print(f"is NOT a DE for game")
+        print(f"   X={X}")
 
     #print(calculate_expectency(X[0], S, p, 0))
