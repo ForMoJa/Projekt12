@@ -262,6 +262,34 @@ def test_DE(X, p, D, verbose=False):
 					print(T)
 					return True
 
+''' Why does this not work?
+D = [2,2,2]
+
+X = [
+[[1,1],
+[1,0]],
+
+[[1,1],
+[1,0]],
+
+[[1,1],
+[1,0]]
+]
+
+p = [
+[[Fraction(0,1),Fraction(0,1)], [Fraction(0,1),Fraction(0,1)]],
+[[Fraction(0,1),Fraction(0,1)], [Fraction(0,1),Fraction(0,1)]]
+]
+
+if len(X) != len(D) and len(X[0]) != len(p) and len(X[0][0]) != len(p[0]):
+        print("Dimensions do not match; You're stupid")
+        exit(1)
+
+S = get_S(D)
+print(f"S = {S}")
+test_DE(X, p, D)
+'''
+
 if __name__ == "__main__":
     global count_polytopes
     count_polytopes=0
