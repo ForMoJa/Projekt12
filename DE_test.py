@@ -265,20 +265,13 @@ def test_DE(X, p, D, verbose=False):
 ''' Why does this not work?
 D = [2,2,2]
 
-X = [
-[[1,1],
-[1,0]],
-
-[[1,1],
-[1,0]],
-
-[[1,1],
-[1,0]]
-]
+X = bigger_prisoners_dilemma()
 
 p = [
-[[Fraction(0,1),Fraction(0,1)], [Fraction(0,1),Fraction(0,1)]],
-[[Fraction(0,1),Fraction(0,1)], [Fraction(0,1),Fraction(0,1)]]
+[[Fraction(1,1),Fraction(0,1)],
+ [Fraction(0,1),Fraction(0,1)]],
+[[Fraction(0,1),Fraction(0,1)],
+ [Fraction(0,1),Fraction(0,1)]]
 ]
 
 if len(X) != len(D) and len(X[0]) != len(p) and len(X[0][0]) != len(p[0]):
